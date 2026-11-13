@@ -22,8 +22,9 @@ main { width: 100%; max-width: 420px; box-sizing: border-box; padding: 24px max(
 h1 { font-size: 20px; font-weight: 700; margin: 0; }
 p { margin: 0; color: var(--muted); font-size: 14px; }
 form { display: flex; flex-direction: column; gap: 8px; }
-input { flex: 1; min-width: 0; font: 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
-input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+textarea { resize: vertical; }
+input, textarea { flex: 1; min-width: 0; font: 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
+input:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button { font: 600 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 16px; cursor: pointer; }
 button:disabled { opacity: .5; cursor: progress; }
 .shake { animation: shake .3s; }
@@ -38,8 +39,7 @@ button:disabled { opacity: .5; cursor: progress; }
   <h1>Заметки</h1>
   <p>Две строки, чтобы открыть.</p>
   <form id="f" autocomplete="off">
-    <input id="k1" type="text" placeholder="Первая строка" aria-label="Первая строка" spellcheck="false" autocapitalize="off">
-    <input id="k2" type="text" placeholder="Вторая строка" aria-label="Вторая строка" spellcheck="false" autocapitalize="off">
+    <textarea id="k" rows="3" placeholder="Вставь или напиши две строки" aria-label="Две строки" spellcheck="false" autocapitalize="off"></textarea>
     <button id="go" type="submit">Открыть</button>
   </form>
   <div id="out" hidden></div>
@@ -47,12 +47,12 @@ button:disabled { opacity: .5; cursor: progress; }
 </main>
 <script>
 // Только шифротекст. Ключа здесь нет: ключ — это фраза, которую вводит человек.
-const DATA = ["U2FsdGVkX19p9+tgqePYj1HGIJ9k8DgLrF289f5BTQW06jfEV2p/QfUy5U9TCx/2RZ67Eaz1ZzTub4OuLvOq96xTtvgHRka/wWAMDbDbWgs=", "U2FsdGVkX1+TQ6IO1A3kZA/6Pp8YvIVSvA2x9vSs626rzHp0BN1UB9UCTJd1eJ9kC+S9Nt4D4Feqhclauwebjw=="];  // по одному шифру на каждую пару строк
+const DATA = ["U2FsdGVkX1++WwKdg0KPBd5/lTc3Te3NNgzTtLV3XlpQ/HbRSmbUGXG38SnUhcyNLl18oMN3IUuvrWDIQ6gKfmVh9xHhTR4hGN/fqEah7MA=", "U2FsdGVkX19iJnwqbrpbKbSMU3rA6ftHl3va67YX8blMBvYXOK4Riskw2dg/qCiWVotSgcfedCy2jPKGiZBnaQ=="];  // по одному шифру на каждую пару строк
 const ITER = 600000;
 
 // Строки приводятся к одному виду: регистр, ё/е, знаки препинания и лишние пробелы не важны.
 const norm = s => s.normalize("NFC").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-const keyOf = (a, b) => norm(a) + "\n" + norm(b);
+
 
 async function decrypt(b64, pass) {
   const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
@@ -66,10 +66,10 @@ const $ = id => document.getElementById(id);
 $("f").onsubmit = async e => {
   e.preventDefault();
   const btn = $("go"), input = $("f");
-  if (!norm($("k1").value) || !norm($("k2").value)) return;
+  if (!norm($("k").value)) return;
   btn.disabled = true;
   try {
-    const key = keyOf($("k1").value, $("k2").value);
+    const key = norm($("k").value);
     let found = null;
     for (const item of DATA) { try { found = await decrypt(item, key); break; } catch {} }
     if (found === null) throw new Error("no match");
