@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Заметки</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --bg: #f3f4f7; --surface: #ffffff; --fg: #171a22; --muted: #6a7182; --line: #d8dce4;
+  --accent: #2747b8; --ok-bg: #e3f3ea; --ok: #1d7a4a;
+  --body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #121419; --surface: #1b1e26; --fg: #e7e9ef; --muted: #959cad; --line: #2d323e;
+  --accent: #8ea6ff; --ok-bg: #16301f; --ok: #6fd39d; color-scheme: dark } }
+html, body { margin: 0; min-height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--body); display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+main { width: 100%; max-width: 420px; box-sizing: border-box; padding: 24px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 20px; font-weight: 700; margin: 0; }
+p { margin: 0; color: var(--muted); font-size: 14px; }
+form { display: flex; flex-direction: column; gap: 8px; }
+input { flex: 1; min-width: 0; font: 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
+input:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { font: 600 15px var(--body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 16px; cursor: pointer; }
+button:disabled { opacity: .5; cursor: progress; }
+.shake { animation: shake .3s; }
+@keyframes shake { 25% { transform: translateX(-5px) } 75% { transform: translateX(5px) } }
+@media (prefers-reduced-motion: reduce) { .shake { animation: none; } }
+#out { background: var(--ok-bg); color: var(--ok); border-radius: 10px; padding: 14px; font: 600 15px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; }
+#copy { align-self: flex-start; padding: 8px 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Заметки</h1>
+  <p>Две строки, чтобы открыть.</p>
+  <form id="f" autocomplete="off">
+    <input id="k1" type="text" placeholder="Первая строка" aria-label="Первая строка" spellcheck="false" autocapitalize="off">
+    <input id="k2" type="text" placeholder="Вторая строка" aria-label="Вторая строка" spellcheck="false" autocapitalize="off">
+    <button id="go" type="submit">Открыть</button>
+  </form>
+  <div id="out" hidden></div>
+  <button id="copy" type="button" hidden>Скопировать</button>
+</main>
+<script>
+// Только шифротекст. Ключа здесь нет: ключ — это фраза, которую вводит человек.
+const DATA = ["U2FsdGVkX19p9+tgqePYj1HGIJ9k8DgLrF289f5BTQW06jfEV2p/QfUy5U9TCx/2RZ67Eaz1ZzTub4OuLvOq96xTtvgHRka/wWAMDbDbWgs=", "U2FsdGVkX1+TQ6IO1A3kZA/6Pp8YvIVSvA2x9vSs626rzHp0BN1UB9UCTJd1eJ9kC+S9Nt4D4Feqhclauwebjw=="];  // по одному шифру на каждую пару строк
+const ITER = 600000;
+
+// Строки приводятся к одному виду: регистр, ё/е, знаки препинания и лишние пробелы не важны.
+const norm = s => s.normalize("NFC").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const keyOf = (a, b) => norm(a) + "\n" + norm(b);
+
+async function decrypt(b64, pass) {
+  const raw = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveBits"]);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: raw.slice(8, 16), iterations: ITER }, base, 384));
+  const key = await crypto.subtle.importKey("raw", bits.slice(0, 32), "AES-CBC", false, ["decrypt"]);
+  return new TextDecoder("utf-8", { fatal: true }).decode(await crypto.subtle.decrypt({ name: "AES-CBC", iv: bits.slice(32, 48) }, key, raw.slice(16)));
+}
+
+const $ = id => document.getElementById(id);
+$("f").onsubmit = async e => {
+  e.preventDefault();
+  const btn = $("go"), input = $("f");
+  if (!norm($("k1").value) || !norm($("k2").value)) return;
+  btn.disabled = true;
+  try {
+    const key = keyOf($("k1").value, $("k2").value);
+    let found = null;
+    for (const item of DATA) { try { found = await decrypt(item, key); break; } catch {} }
+    if (found === null) throw new Error("no match");
+    $("out").textContent = found;
+    $("out").hidden = false; $("copy").hidden = false; $("f").hidden = true;
+  } catch {
+    input.classList.remove("shake"); void input.offsetWidth; input.classList.add("shake");
+  } finally { btn.disabled = false; }
+};
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("out").textContent); $("copy").textContent = "Скопировано"; }
+  catch { const r = document.createRange(); r.selectNodeContents($("out")); getSelection().removeAllRanges(); getSelection().addRange(r); }
+};
+</script>
+</body>
+</html>
